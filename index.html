@@ -8,13 +8,14 @@
     :root{
       --bg:#0b0f14; --panel:#131a22; --muted:#8fa3b8; --text:#e8f0f7; --accent:#4ea1ff; --accent-2:#8b5cf6;
       --good:#22c55e; --bad:#ef4444; --warn:#f59e0b; --chip:#18222f;
+      --our:#1e40af; --their:#7f1d1d;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
     body{margin:0;background:linear-gradient(180deg,var(--bg),#0a1119);color:var(--text);font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
     h1{font-size:20px;margin:0 0 8px}
     h2{font-size:16px;margin:0 0 8px;color:var(--muted)}
-    .app{display:grid;grid-template-columns:320px 1fr 360px;gap:12px;padding:12px}
+    .app{display:grid;grid-template-columns:340px 1fr 380px;gap:12px;padding:12px}
     .card{background:var(--panel);border:1px solid #1f2a37;border-radius:12px;padding:12px;box-shadow:0 1px 0 #0a0f14}
     .row{display:flex;gap:8px;align-items:center}
     .row.wrap{flex-wrap:wrap}
@@ -23,6 +24,7 @@
     .btn:hover{border-color:#33506f}
     .btn.primary{background:linear-gradient(180deg,#1b2740,#162236);border-color:#385a86}
     .btn.ghost{background:transparent}
+    .btn.sm{padding:4px 8px;border-radius:8px;font-size:12px}
     .chip{background:var(--chip);border:1px solid #243447;color:var(--muted);padding:4px 8px;border-radius:999px;font-size:12px}
 
     /* Draft grid */
@@ -36,12 +38,13 @@
 
     /* Champion grid */
     .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
-    .champ{background:#0f1621;border:1px solid #223244;border-radius:12px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column}
+    .champ{position:relative;background:#0f1621;border:1px solid #223244;border-radius:12px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column}
     .champ:hover{border-color:#3a5c86}
     .champ img{width:100%;aspect-ratio:1/1;object-fit:cover}
     .champ .meta{padding:6px}
     .meta .name{font-weight:600}
     .meta .tags{font-size:11px;color:#aab7c4}
+    .champ .add{position:absolute;top:6px;right:6px;background:#0b1220aa;border:1px solid #395b87;color:#cfe6ff;border-radius:8px;padding:2px 6px;font-size:12px;cursor:pointer}
 
     /* Pools */
     .pool{border-top:1px solid #223244;margin-top:8px;padding-top:8px}
@@ -59,7 +62,7 @@
     .pill.warn{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);color:#facc15}
 
     /* Modal */
-    dialog{border:none;border-radius:12px;background:#0e1520;color:var(--text);padding:0;max-width:720px}
+    dialog{border:none;border-radius:12px;background:#0e1520;color:var(--text);padding:0;max-width:760px}
     dialog .modal-head{padding:12px 12px;border-bottom:1px solid #1f2a37;display:flex;align-items:center;gap:10px}
     dialog .modal-body{padding:12px}
     .close-x{margin-left:auto;background:transparent;border:none;color:#aab7c4;font-size:18px;cursor:pointer}
@@ -70,6 +73,17 @@
     input[type="number"],select,input[type="text"]{background:#0f1621;border:1px solid #223244;border-radius:8px;color:var(--text);padding:6px}
     .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:8px}
     .notice{background:#0f1b2a;border:1px solid #1c3550;border-radius:10px;padding:10px;color:#a9d0ff}
+
+    /* Timeline */
+    .timeline-bar{border-top:1px solid #223244;margin-top:8px;padding-top:8px}
+    .timeline{display:flex;gap:6px;flex-wrap:wrap}
+    .step{display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid #2b3b50;border-radius:8px;background:#0f1621;font-size:12px;opacity:.7}
+    .step.our{border-color:#2f5dd0;background:#0c1731}
+    .step.their{border-color:#8b3030;background:#1b0f0f}
+    .step.current{outline:2px solid #7dd3fc;opacity:1}
+    .step.done{opacity:.45}
+
+    .role-badge{border:1px solid #2b3b50;background:#0f1621;border-radius:8px;padding:2px 6px;font-size:11px}
 
     @media (max-width:1100px){.app{grid-template-columns:1fr;}}
   </style>
@@ -94,6 +108,18 @@
         <span class="chip" id="ddVersion">Data loading…</span>
       </div>
 
+      <div class="timeline-bar">
+        <div class="row">
+          <h2 style="margin:0">Draft Order</h2><span class="spacer"></span>
+          <label class="switch small"><input type="checkbox" id="enforceTimeline" checked> Enforce</label>
+          <label class="switch small"><input type="checkbox" id="blueFirst" checked> Our = Blue</label>
+          <button class="btn sm" id="prevStep">◀</button>
+          <span class="chip" id="stepLabel">Step —</span>
+          <button class="btn sm" id="nextStep">▶</button>
+        </div>
+        <div id="timeline" class="timeline" aria-live="polite"></div>
+      </div>
+
       <h2>Our Bans</h2>
       <div class="slots" id="ourBans"></div>
       <h2>Enemy Bans</h2>
@@ -114,6 +140,14 @@
     <div class="card">
       <div class="toolbar">
         <input type="text" id="search" placeholder="Search champions… (e.g., Ahri)" style="flex:1"/>
+        <select id="roleFilter">
+          <option value="">All roles</option>
+          <option value="0">Top</option>
+          <option value="1">Jungle</option>
+          <option value="2">Mid</option>
+          <option value="3">ADC</option>
+          <option value="4">Support</option>
+        </select>
         <select id="sortBy">
           <option value="name">Sort: Name A→Z</option>
           <option value="tag">Sort: Primary Tag</option>
@@ -172,25 +206,68 @@
         <button class="btn" id="pickUs">Pick — Our</button>
         <button class="btn" id="pickThem">Pick — Enemy</button>
       </div>
+      <div class="row wrap" style="margin-top:12px;gap:6px" id="poolAdder">
+        <span class="small">Add to Pool:</span>
+        <select id="poolRole">
+          <option value="0">Top</option><option value="1">Jungle</option><option value="2">Mid</option><option value="3">ADC</option><option value="4">Support</option>
+        </select>
+        <div class="stars" id="poolStars"></div>
+        <button class="btn" id="addToPoolBtn">Add</button>
+      </div>
     </div>
   </dialog>
 
   <script>
   // -------------------------------
-  // Minimal POC Draft Assistant
+  // Draft Assistant — Enhanced POC
   // Single-file, GitHub Pages ready
   // -------------------------------
+  const roles=['Top','Jungle','Mid','ADC','Support'];
+
   const state = {
     version: null,
     lang: 'en_US',
-    champions: [], // {id,name,tags,image,ap,ad,tank}
+    champions: [], // {id,name,tags,image,roles:[0-4], ap/ad/tank/support}
     our: { bans: [], picks: [null,null,null,null,null], pools: [[],[],[],[],[]] },
     their:{ bans: [], picks: [null,null,null,null,null] },
-    banCount: 5
+    banCount: 5,
+    timeline:{ steps:[], idx:0, enforce:true, blueFirst:true }
   };
 
   const el = sel => document.querySelector(sel);
   const els = sel => Array.from(document.querySelectorAll(sel));
+
+  // === Persistence (localStorage) ===
+  const STORAGE_KEY='lol_draft_poc_state_v2';
+  function toSnapshot(){
+    const idOrNull = x=> x? x.id : null;
+    return {
+      version: state.version,
+      lang: state.lang,
+      banCount: state.banCount,
+      timeline:{ idx: state.timeline.idx, enforce: state.timeline.enforce, blueFirst: state.timeline.blueFirst },
+      our:{ bans: state.our.bans.map(idOrNull), picks: state.our.picks.map(idOrNull), pools: state.our.pools },
+      their:{ bans: state.their.bans.map(idOrNull), picks: state.their.picks.map(idOrNull) }
+    };
+  }
+  function fromSnapshot(snap){
+    if(!snap) return;
+    state.lang = snap.lang || state.lang;
+    state.banCount = snap.banCount || state.banCount;
+    state.timeline.idx = snap.timeline?.idx || 0;
+    state.timeline.enforce = snap.timeline?.enforce ?? true;
+    state.timeline.blueFirst = snap.timeline?.blueFirst ?? true;
+    // rebuild timeline after champs load
+    buildTimeline();
+    const byId = id=> state.champions.find(c=>c.id===id) || null;
+    state.our.bans = (snap.our?.bans||[]).map(byId);
+    state.our.picks = (snap.our?.picks||[]).map(byId);
+    state.our.pools = snap.our?.pools || state.our.pools;
+    state.their.bans = (snap.their?.bans||[]).map(byId);
+    state.their.picks = (snap.their?.picks||[]).map(byId);
+  }
+  function save(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(toSnapshot())); }catch(_){} }
+  function load(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch(_){ return null; } }
 
   // Riot Data Dragon helpers
   async function loadDDragonVersion(){
@@ -205,12 +282,29 @@
     el('#ddVersion').textContent = 'DDragon ' + state.version;
   }
 
+  function rolesFromTags(tags, id){
+    const set = new Set();
+    if(tags.includes('Marksman')) set.add(3);
+    if(tags.includes('Support')) set.add(4);
+    if(tags.includes('Mage')){ set.add(2); set.add(4); }
+    if(tags.includes('Assassin')){ set.add(2); set.add(1); }
+    if(tags.includes('Fighter')){ set.add(0); set.add(1); }
+    if(tags.includes('Tank')){ set.add(0); set.add(4); set.add(1); }
+    // Tiny opinionated overrides for clarity in POC
+    const only = (arr)=>{ set.clear(); arr.forEach(x=>set.add(x)); };
+    if(id==='Ezreal') only([3]);
+    if(id==='Leona') only([4]);
+    if(id==='Garen') only([0]);
+    if(id==='Ahri') only([2]);
+    if(id==='LeeSin' || id==='Lee Sin') only([1]);
+    return Array.from(set);
+  }
+
   async function loadChampions(){
     const url = `https://ddragon.leagueoflegends.com/cdn/${state.version}/data/${state.lang}/champion.json`;
     let data;
-    try{
-      data = await fetch(url).then(r=>r.json());
-    }catch(e){
+    try{ data = await fetch(url).then(r=>r.json()); }
+    catch(e){
       console.error('Champion fetch failed:', e);
       data = { data: {
         Ahri:{ id:'Ahri', name:'Ahri', tags:['Mage','Assassin'], image:{full:'Ahri.png'} },
@@ -230,13 +324,63 @@
       dmgAD: c.tags.some(t=>['Marksman','Fighter','Assassin'].includes(t)),
       tank: c.tags.includes('Tank'),
       support: c.tags.includes('Support'),
-      primaryTag: c.tags[0]||'Unknown'
+      primaryTag: c.tags[0]||'Unknown',
+      roles: rolesFromTags(c.tags, c.id)
     }));
   }
 
-  // UI Renders
+  // === Timeline ===
+  function buildTimeline(){
+    const blue = state.timeline.blueFirst ? 'our' : 'their';
+    const red  = state.timeline.blueFirst ? 'their' : 'our';
+    const steps = [];
+    // Ban phase 1 — 3 each
+    ;[blue,red,blue,red,blue,red].forEach(side=> steps.push({t:'ban',side}));
+    // Pick phase 1 — B 1, R 2, B 2, R 1
+    ;[blue,red,red,blue,blue,red].forEach(side=> steps.push({t:'pick',side}));
+    if(state.banCount===5){
+      // Ban phase 2 — R,B,R,B
+      ;[red,blue,red,blue].forEach(side=> steps.push({t:'ban',side}));
+    }
+    // Pick phase 2 — R 1, B 2, R 1
+    ;[red,blue,blue,red].forEach(side=> steps.push({t:'pick',side}));
+    state.timeline.steps = steps;
+    if(state.timeline.idx>=steps.length) state.timeline.idx=0;
+    renderTimeline();
+  }
+
+  function stepLabelText(){
+    const s = state.timeline.steps[state.timeline.idx];
+    if(!s) return 'Done';
+    return `${state.timeline.idx+1}/${state.timeline.steps.length} — ${s.side==='our'?'Our':'Enemy'} ${s.t==='ban'?'Ban':'Pick'}`;
+  }
+
+  function renderTimeline(){
+    const wrap = el('#timeline'); wrap.innerHTML='';
+    state.timeline.steps.forEach((s,i)=>{
+      const d = document.createElement('div');
+      d.className = 'step '+s.side+(i<state.timeline.idx?' done': i===state.timeline.idx?' current':'');
+      d.textContent = (s.side==='our'?'Our ':'Enemy ')+(s.t==='ban'?'Ban':'Pick');
+      wrap.appendChild(d);
+    });
+    el('#stepLabel').textContent = stepLabelText();
+  }
+
+  function advanceStep(delta){
+    const n = state.timeline.steps.length;
+    state.timeline.idx = Math.max(0, Math.min(n, state.timeline.idx + delta));
+    renderTimeline(); save();
+  }
+  function isCurrent(t,side){
+    if(!state.timeline.enforce) return true;
+    const s = state.timeline.steps[state.timeline.idx];
+    if(!s) return true; // finished
+    return s.t===t && s.side===side;
+  }
+
+  // === UI Renders ===
   function renderSlots(){
-    const mkSlots=(parent,list,isEnemy,isBan)=>{
+    const mkSlots=(parent,list,isEnemy,isBan,canDrag)=>{
       parent.innerHTML='';
       const n = isBan? state.banCount : 5;
       for(let i=0;i<n;i++){
@@ -248,26 +392,35 @@
           const x = document.createElement('div'); x.className='x'; x.textContent='✕'; x.title='Clear';
           x.onclick = ()=>{ list[i]=null; renderAll(); };
           slot.appendChild(x);
+          if(canDrag){
+            slot.draggable = true;
+            slot.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', String(i)); });
+            slot.addEventListener('dragover', e=> e.preventDefault());
+            slot.addEventListener('drop', e=>{ e.preventDefault(); const from = parseInt(e.dataTransfer.getData('text/plain'),10); const to=i; const tmp=list[from]; list[from]=list[to]; list[to]=tmp; renderAll(); });
+          }
         }else{
           const lab = document.createElement('div'); lab.className='label'; lab.textContent=(isBan?'Ban ':'Pick ')+(i+1);
           slot.appendChild(lab);
+          if(canDrag){ slot.addEventListener('dragover', e=> e.preventDefault()); slot.addEventListener('drop', e=>{ e.preventDefault(); const from = parseInt(e.dataTransfer.getData('text/plain'),10); const to=i; const tmp=list[from]; list[from]=list[to]; list[to]=tmp; renderAll(); }); }
         }
         if(isBan && v) slot.classList.add('banned');
         parent.appendChild(slot);
       }
     };
-    mkSlots(el('#ourBans'), state.our.bans, false, true);
-    mkSlots(el('#theirBans'), state.their.bans, true, true);
-    mkSlots(el('#ourPicks'), state.our.picks, false, false);
-    mkSlots(el('#theirPicks'), state.their.picks, true, false);
+    mkSlots(el('#ourBans'), state.our.bans, false, true, false);
+    mkSlots(el('#theirBans'), state.their.bans, true, true, false);
+    mkSlots(el('#ourPicks'), state.our.picks, false, false, true);
+    mkSlots(el('#theirPicks'), state.their.picks, true, false, false);
     renderCompSnapshot();
   }
 
   function renderChampGrid(){
     const q = el('#search').value.trim().toLowerCase();
     const tag = el('#tagFilter').value;
+    const roleSel = el('#roleFilter').value;
     let list = state.champions.filter(c=> c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q));
     if(tag) list = list.filter(c=> c.tags.includes(tag));
+    if(roleSel!=='') list = list.filter(c=> c.roles.includes(parseInt(roleSel,10)));
     const sortBy = el('#sortBy').value;
     if(sortBy==='name') list.sort((a,b)=>a.name.localeCompare(b.name));
     else if(sortBy==='tag') list.sort((a,b)=> (a.primaryTag||'').localeCompare(b.primaryTag||''));
@@ -277,25 +430,27 @@
       const card = document.createElement('div'); card.className='champ';
       const img = document.createElement('img'); img.src=c.image; img.alt=c.name; card.appendChild(img);
       const meta = document.createElement('div'); meta.className='meta';
-      meta.innerHTML = `<div class="name">${c.name}</div><div class="tags">${c.tags.join(', ')}</div>`;
+      const roleBadges = c.roles.map(r=>`<span class="role-badge">${roles[r]}</span>`).join(' ');
+      meta.innerHTML = `<div class="name">${c.name}</div><div class="tags">${c.tags.join(', ')} · ${roleBadges}</div>`;
       card.appendChild(meta);
-      card.onclick=()=>openChampionModal(c);
+      const add = document.createElement('button'); add.className='add'; add.textContent='＋'; add.title='Add to Pool';
+      add.onclick=(e)=>{ e.stopPropagation(); openChampionModal(c,true); };
+      card.appendChild(add);
+      card.onclick=()=>openChampionModal(c,false);
       grid.appendChild(card);
     })
   }
 
   function renderPools(){
-    const roles=['Top','Jungle','Mid','ADC','Support'];
     const container = el('#pools');
     container.innerHTML='';
     state.our.pools.forEach((pool,idx)=>{
       const sec = document.createElement('div'); sec.className='pool-item'; sec.style.flexDirection='column'; sec.style.alignItems='stretch';
       const head = document.createElement('div'); head.className='row';
       head.innerHTML = `<div style="font-weight:600">${roles[idx]} Pool</div>`;
-      const add = document.createElement('button'); add.className='btn'; add.textContent='Add Champ'; add.onclick=()=>addToPool(idx);
+      const add = document.createElement('button'); add.className='btn'; add.textContent='Add Champ'; add.onclick=()=>addToPoolPrompt(idx);
       head.appendChild(add); sec.appendChild(head);
 
-      // list
       pool.forEach((p,i)=>{
         const item = document.createElement('div'); item.className='pool-item';
         const champ = state.champions.find(c=>c.id===p.id);
@@ -304,10 +459,10 @@
         const stars = document.createElement('div'); stars.className='stars';
         for(let s=1;s<=5;s++){
           const st = document.createElement('div'); st.className='star'+(p.comfort>=s?' on':''); st.textContent='★'; st.title=s+' comfort';
-          st.onclick=()=>{p.comfort=s; renderPools();};
+          st.onclick=()=>{p.comfort=s; renderPools(); save();};
           stars.appendChild(st);
         }
-        const rm = document.createElement('button'); rm.className='btn'; rm.textContent='Remove'; rm.onclick=()=>{pool.splice(i,1); renderPools();};
+        const rm = document.createElement('button'); rm.className='btn'; rm.textContent='Remove'; rm.onclick=()=>{pool.splice(i,1); renderPools(); save();};
         item.appendChild(stars); item.appendChild(rm); sec.appendChild(item);
       })
 
@@ -323,13 +478,13 @@
       `AD: ${chip(s.hasAD?'OK':'Missing AD', s.hasAD)} `+
       `Frontline: ${chip(s.hasFront?'OK':'No Tank', s.hasFront)} `+
       `Support: ${chip(s.hasSupport?'OK':'No Support', s.hasSupport)} `+
-      `<div class="small" style="margin-top:6px">Tip: recommendations try to fill what you're missing and weight by the selected player's comfort.</div>`;
+      `<div class="small" style="margin-top:6px">Tip: recommendations try to fill what you're missing and weight by the selected player's comfort + role viability.</div>`;
   }
 
   // Modal
   const modal = el('#champModal');
   let modalChamp = null;
-  function openChampionModal(c){
+  function openChampionModal(c, focusPool=false){
     modalChamp = c;
     el('#modalImg').src=c.image; el('#modalName').textContent=c.name; el('#modalTags').textContent=c.tags.join(', ');
     const badges = el('#modalBadges'); badges.innerHTML='';
@@ -338,16 +493,42 @@
     if(c.dmgAD) badges.appendChild(mk('AD'));
     if(c.tank) badges.appendChild(mk('Frontline'));
     if(c.support) badges.appendChild(mk('Utility'));
+    c.roles.forEach(r=> badges.appendChild(mk(roles[r])));
+
+    // enable/disable actions based on timeline
+    el('#banUs').disabled = !isCurrent('ban','our');
+    el('#banThem').disabled = !isCurrent('ban','their');
+    el('#pickUs').disabled = !isCurrent('pick','our');
+    el('#pickThem').disabled = !isCurrent('pick','their');
+
+    // pool stars
+    const stars = el('#poolStars'); stars.innerHTML='';
+    for(let s=1;s<=5;s++){
+      const d=document.createElement('div'); d.className='star'+(s<=3?' on':''); d.textContent='★'; d.title=s+' comfort';
+      d.onclick=()=>{ els('#poolStars .star').forEach((e,i)=> e.classList.toggle('on', i<s)); stars.dataset.val=s; };
+      stars.appendChild(d);
+    }
+    stars.dataset.val=3;
+    el('#poolRole').value= String(c.roles[0] ?? 0);
+
     modal.showModal();
+    if(focusPool){ setTimeout(()=> el('#addToPoolBtn').focus(), 0); }
   }
   el('#closeModal').onclick=()=>modal.close();
-  el('#banUs').onclick=()=>{ placeIntoFirstEmpty(state.our.bans, modalChamp, state.banCount); modal.close(); renderAll(); };
-  el('#banThem').onclick=()=>{ placeIntoFirstEmpty(state.their.bans, modalChamp, state.banCount); modal.close(); renderAll(); };
-  el('#pickUs').onclick=()=>{ placeIntoFirstEmpty(state.our.picks, modalChamp, 5); modal.close(); renderAll(); };
-  el('#pickThem').onclick=()=>{ placeIntoFirstEmpty(state.their.picks, modalChamp, 5); modal.close(); renderAll(); };
+  el('#banUs').onclick=()=>{ if(!isCurrent('ban','our')) return alert('Not our ban turn.'); placeIntoFirstEmpty(state.our.bans, modalChamp, state.banCount); advanceStep(1); modal.close(); renderAll(); };
+  el('#banThem').onclick=()=>{ if(!isCurrent('ban','their')) return alert('Not enemy ban turn.'); placeIntoFirstEmpty(state.their.bans, modalChamp, state.banCount); advanceStep(1); modal.close(); renderAll(); };
+  el('#pickUs').onclick=()=>{ if(!isCurrent('pick','our')) return alert('Not our pick turn.'); placeIntoFirstEmpty(state.our.picks, modalChamp, 5); advanceStep(1); modal.close(); renderAll(); };
+  el('#pickThem').onclick=()=>{ if(!isCurrent('pick','their')) return alert('Not enemy pick turn.'); placeIntoFirstEmpty(state.their.picks, modalChamp, 5); advanceStep(1); modal.close(); renderAll(); };
+
+  el('#addToPoolBtn').onclick=()=>{
+    const roleIdx = parseInt(el('#poolRole').value,10);
+    const comfort = parseInt(el('#poolStars').dataset.val||'3',10);
+    state.our.pools[roleIdx].push({ id: modalChamp.id, comfort: Math.max(1,Math.min(5,comfort)) });
+    renderPools(); save();
+  };
 
   function placeIntoFirstEmpty(arr,val,max){
-    // if exists, prevent duplicates
+    // if exists anywhere, prevent duplicates across all slots
     if([...state.our.picks,...state.their.picks].some(x=>x?.id===val.id)) return;
     if([...state.our.bans,...state.their.bans].some(x=>x?.id===val.id)) return;
     for(let i=0;i<max;i++){ if(!arr[i]){ arr[i]=val; return; } }
@@ -355,19 +536,18 @@
     arr[max-1]=val;
   }
 
-  // Pools helpers
-  function addToPool(roleIdx){
-    // Simple chooser: reuse champ grid with search
+  // Pools helpers (prompt fallback)
+  function addToPoolPrompt(roleIdx){
     const name = prompt('Type a champion ID or Name to add (e.g., Ahri)');
     if(!name) return;
     const c = state.champions.find(x=> x.name.toLowerCase()===name.toLowerCase() || x.id.toLowerCase()===name.toLowerCase());
     if(!c){ alert('Champion not found. Check spelling.'); return; }
     const comfort = parseInt(prompt('Comfort 1-5? (default 3)')||'3',10);
     state.our.pools[roleIdx].push({ id:c.id, comfort: Math.max(1,Math.min(5,comfort||3)) });
-    renderPools();
+    renderPools(); save();
   }
 
-  // Recommendation engine (very POC)
+  // Recommendation engine (POC)
   function summarizeComp(picks){
     const s = {hasAP:false, hasAD:false, hasFront:false, hasSupport:false};
     for(const p of picks){ if(!p) continue; s.hasAP ||= p.dmgAP; s.hasAD ||= p.dmgAD; s.hasFront ||= p.tank; s.hasSupport ||= p.support; }
@@ -387,13 +567,17 @@
         if(p){ score += p.comfort*10; reasons.push(`Comfort ×${p.comfort}`); }
         else { score += 3; reasons.push('Off-pool baseline'); }
 
+        // Role viability
+        if(c.roles.includes(roleIdx)){ score += 8; reasons.push(`viable ${roles[roleIdx]}`); }
+        else { score -= 8; reasons.push('off-role'); }
+
         // Fill gaps
         if(!comp.hasAP && c.dmgAP){ score += 6; reasons.push('adds AP'); }
         if(!comp.hasAD && c.dmgAD){ score += 6; reasons.push('adds AD'); }
         if(!comp.hasFront && c.tank){ score += 6; reasons.push('frontline'); }
         if(!comp.hasSupport && c.support){ score += 5; reasons.push('utility'); }
 
-        // Light diversity balancing
+        // Diversity balancing
         const adCount = state.our.picks.filter(p=>p?.dmgAD).length;
         const apCount = state.our.picks.filter(p=>p?.dmgAP).length;
         if(adCount>=3 && c.dmgAD){ score -= 4; reasons.push('too much AD'); }
@@ -419,19 +603,18 @@
                       `<button class='btn' data-id='${it.champ.id}'>Pick</button>`;
       list.appendChild(row);
     });
-    // attach pick handlers
     list.querySelectorAll('button[data-id]').forEach(btn=>{
       btn.onclick=()=>{
         const champ = state.champions.find(c=>c.id===btn.dataset.id);
-        // place into first empty pick slot on our side
         placeIntoFirstEmpty(state.our.picks, champ, 5);
+        if(state.timeline.enforce && state.timeline.steps[state.timeline.idx]?.t==='pick' && state.timeline.steps[state.timeline.idx]?.side==='our') advanceStep(1);
         renderAll();
       }
     })
   }
 
   function exportJSON(){
-    const out = JSON.stringify(state, null, 2);
+    const out = JSON.stringify(toSnapshot(), null, 2);
     const blob = new Blob([out], {type:'application/json'});
     const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='draft-state.json'; a.click();
   }
@@ -439,13 +622,8 @@
   function importJSON(f){
     const reader = new FileReader();
     reader.onload = e=>{
-      try{
-        const inState = JSON.parse(e.target.result);
-        // only import safe slices
-        state.our = inState.our || state.our; state.their = inState.their || state.their; state.banCount=inState.banCount||state.banCount;
-        el('#banCount').value = String(state.banCount);
-        renderAll();
-      }catch(err){ alert('Invalid JSON.'); }
+      try{ const snap = JSON.parse(e.target.result); fromSnapshot(snap); renderAll(); save(); }
+      catch(err){ alert('Invalid JSON.'); }
     }
     reader.readAsText(f);
   }
@@ -454,21 +632,33 @@
   el('#search').addEventListener('input', renderChampGrid);
   el('#sortBy').addEventListener('change', renderChampGrid);
   el('#tagFilter').addEventListener('change', renderChampGrid);
-  el('#banCount').addEventListener('change', e=>{ state.banCount=parseInt(e.target.value,10); renderSlots(); });
-  el('#langSel').addEventListener('change', async e=>{ state.lang=e.target.value; await loadChampions(); renderChampGrid(); });
+  el('#roleFilter').addEventListener('change', renderChampGrid);
+  el('#banCount').addEventListener('change', e=>{ state.banCount=parseInt(e.target.value,10); buildTimeline(); renderSlots(); save(); });
+  el('#langSel').addEventListener('change', async e=>{ state.lang=e.target.value; await loadChampions(); fromSnapshot(load()); renderAll(); save(); });
+  el('#enforceTimeline').addEventListener('change', e=>{ state.timeline.enforce = e.target.checked; save(); });
+  el('#blueFirst').addEventListener('change', e=>{ state.timeline.blueFirst = e.target.checked; buildTimeline(); save(); });
+  el('#prevStep').onclick=()=> advanceStep(-1);
+  el('#nextStep').onclick=()=> advanceStep(1);
   el('#recoBtn').onclick=()=> recommend(parseInt(el('#pickSlot').value,10));
   el('#clearRecoBtn').onclick=()=> el('#recoList').innerHTML='';
-  el('#resetBtn').onclick=()=>{ if(confirm('Clear all picks/bans/pools?')){ state.our={bans:[],picks:[null,null,null,null,null],pools:[[],[],[],[],[]]}; state.their={bans:[],picks:[null,null,null,null,null]}; renderAll(); } };
+  el('#resetBtn').onclick=()=>{ if(confirm('Clear all picks/bans/pools?')){ state.our={bans:[],picks:[null,null,null,null,null],pools:[[],[],[],[],[]]}; state.their={bans:[],picks:[null,null,null,null,null]}; state.timeline.idx=0; renderAll(); save(); } };
   el('#exportBtn').onclick=exportJSON;
   el('#importBtn').onclick=()=> el('#importFile').click();
   el('#importFile').addEventListener('change', e=>{ if(e.target.files[0]) importJSON(e.target.files[0]); e.target.value=''; });
 
-  function renderAll(){ renderSlots(); renderPools(); renderChampGrid(); }
+  function renderAll(){ renderSlots(); renderPools(); renderChampGrid(); renderTimeline(); save(); }
 
   // Boot
   (async function init(){
+    const snap = load();
     await loadDDragonVersion();
     await loadChampions();
+    buildTimeline();
+    fromSnapshot(snap);
+    // sync UI controls with state
+    el('#banCount').value = String(state.banCount);
+    el('#enforceTimeline').checked = state.timeline.enforce;
+    el('#blueFirst').checked = state.timeline.blueFirst;
     renderAll();
   })();
   </script>
